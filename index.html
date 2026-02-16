@@ -1,90 +1,379 @@
-<!DOCTYPE html>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div class="titles">
+        <div class="kicker">Hérault Énergie • Chef de projet : Frédéric Lamur</div>
+        <h1>Diagnostic énergétique des bâtiments</h1>
+      </div>
+    </div>
 
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Carte énergétique Vendémian</title>
+    <div class="actions">
+      <button class="btn" id="openBilans">Bilans communaux</button>
+      <div class="pill" id="zoomPill">Zoom : —</div>
+    </div>
+  </header>
 
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+  <div id="map"></div>
 
-<style>
-body { margin:0; padding:0; }
-#map { position:absolute; top:0; bottom:0; width:100%; }
+  <div class="legend">
+    <div class="legend-title">Lecture</div>
+    <div class="legend-row"><span class="dot"></span> Bâtiment diagnostiqué</div>
+    <div class="legend-row subtle">Clique sur un point pour ouvrir la fiche</div>
+  </div>
 
-.popup img{
-  width:250px;
-  border-radius:8px;
-  margin-bottom:8px;
+  <!-- Drawer bilans -->
+  <div class="drawer" id="drawer">
+    <div class="drawer-card">
+      <div class="drawer-head">
+        <div>
+          <div class="drawer-kicker">Bilans communaux</div>
+          <div class="drawer-title">Sélectionne une commune</div>
+        </div>
+        <button class="iconbtn" id="closeDrawer">✕</button>
+      </div>
+
+      <div class="drawer-body">
+        <div class="list" id="bilansList"></div>
+
+        <div class="pdfview">
+          <div class="pdfhead">
+            <div class="pdftitle" id="pdfTitle">Aucun bilan ouvert</div>
+            <a class="btn ghost" id="openNewTab" target="_blank" style="display:none;">Ouvrir dans un nouvel onglet</a>
+          </div>
+          <iframe id="pdfFrame" title="Bilan communal" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+    <div class="backdrop" id="backdrop"></div>
+  </div>
+</div>
+
+:root{
+  --bg:#f6faf8;
+  --panel:rgba(255,255,255,.86);
+  --stroke:rgba(12,60,40,.14);
+  --text:#0b1b14;
+  --muted:rgba(11,27,20,.65);
+  --accent:#1e8e6a;   /* vert énergie */
+  --accent2:#1b6eea;  /* bleu institutionnel */
+  --danger:#e53935;
 }
 
-.popup a{
-  display:inline-block;
-  margin-top:5px;
-  background:#2e7d32;
-  color:white;
-  padding:6px 10px;
-  text-decoration:none;
-  border-radius:6px;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: var(--bg);
+  color:var(--text);
 }
-</style>
+#map{position:absolute; inset:0}
 
-</head>
+/* BARRE HAUT COMPACTE (pas pleine largeur) */
+.topbar{
+  position:absolute;
+  top:16px;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(980px, calc(100vw - 28px));
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:var(--panel);
+  border:1px solid var(--stroke);
+  backdrop-filter: blur(10px);
+  z-index:10;
+  box-shadow: 0 14px 40px rgba(0,0,0,.12);
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.logo{
+  width:38px;height:38px;display:grid;place-items:center;
+  border-radius:12px;
+  background: linear-gradient(135deg, rgba(30,142,106,.16), rgba(27,110,234,.12));
+  border:1px solid var(--stroke);
+}
+.kicker{font-size:12px;color:var(--muted)}
+h1{margin:0;font-size:16px;line-height:1.2}
 
-<body>
-<div id="map"></div>
+.actions{display:flex;align-items:center;gap:10px}
+.btn{
+  cursor:pointer;
+  border:1px solid var(--stroke);
+  background: rgba(30,142,106,.12);
+  color: var(--text);
+  padding:8px 10px;
+  border-radius:12px;
+  font-weight:600;
+}
+.btn:hover{background: rgba(30,142,106,.18)}
+.btn.ghost{background:transparent}
+.pill{
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.6);
+  font-size:12px;
+  color:var(--muted);
+}
 
-<script>
+/* LEGEND */
+.legend{
+  position:absolute;
+  left:16px;
+  bottom:16px;
+  width:min(320px, calc(100vw - 32px));
+  padding:12px 12px;
+  border-radius:14px;
+  background:var(--panel);
+  border:1px solid var(--stroke);
+  backdrop-filter: blur(10px);
+  z-index:10;
+}
+.legend-title{font-weight:700;margin-bottom:6px}
+.legend-row{display:flex;align-items:center;gap:10px;font-size:13px}
+.legend-row.subtle{margin-top:6px;color:var(--muted);font-size:12px}
+.dot{width:10px;height:10px;border-radius:999px;background:var(--danger);border:2px solid #fff}
+
+/* POPUP COMPACT */
+.mapboxgl-popup { max-width: 240px !important; }
+.mapboxgl-popup-content{
+  padding: 10px 10px 8px !important;
+  border-radius: 14px !important;
+}
+
+.popup-mini h3{
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.popup-mini .row{
+  font-size: 12px;
+  color: rgba(11,27,20,.75);
+  line-height: 1.25;
+}
+
+.popup-mini .thumb{
+  margin-top: 8px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(12,60,40,.14);
+  background: rgba(255,255,255,.6);
+}
+.popup-mini .thumb img{
+  display:block;
+  width:100%;
+  height: 110px;          /* mini ! */
+  object-fit: cover;
+}
+
+.popup-mini .actions{
+  margin-top: 8px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.popup-mini .actions a{
+  padding:6px 8px;
+  border-radius:10px;
+  font-size:12px;
+}
+
 mapboxgl.accessToken = 'pk.eyJ1IjoibmluYW5vdW4iLCJhIjoiY2pjdHBoZGlzMnV4dDJxcGc5azJkbWRiYSJ9.o4dZRrdHcgVEKCveOXG1YQ';
 
+/* === Base GitHub Pages (recommandé) === */
+const BASE = "https://laminedame.github.io/Energie/";
+const GEOJSON_URL = encodeURI(BASE + "data/Données_Bat.geojson"); // accent -> encodeURI
+const IMG_BASE = BASE + "img/";
+const PDF_BASE = BASE + "pdf/";
+
+/* === Bilans communaux (à adapter si tu as plusieurs communes) ===
+   Tu peux ajouter d’autres lignes :
+   { name:"Autre commune", file:"bilan_autre.pdf" }
+*/
+const BILANS = [
+  { name: "Vendémian", file: "bilan_vendemian.pdf" }
+];
+
+/* === Map init === */
 const map = new mapboxgl.Map({
-    container: 'map',
-    style: 'mapbox://styles/mapbox/streets-v12',
-    center: [3.5617, 43.5800],
-    zoom: 15
+  container: "map",
+  style: "mapbox://styles/mapbox/streets-v12",
+  center: [3.5617, 43.5800],
+  zoom: 14
 });
 
-map.on('load', () => {
+map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-    map.addSource('batiments', {
-        type: 'geojson',
-        data: 'data/Données_Bat.geojson'
+/* === UI refs === */
+const drawer = document.getElementById("drawer");
+const backdrop = document.getElementById("backdrop");
+const openBilansBtn = document.getElementById("openBilans");
+const closeDrawerBtn = document.getElementById("closeDrawer");
+const bilansList = document.getElementById("bilansList");
+const pdfFrame = document.getElementById("pdfFrame");
+const pdfTitle = document.getElementById("pdfTitle");
+const openNewTab = document.getElementById("openNewTab");
+const zoomPill = document.getElementById("zoomPill");
+
+/* inject un <img> dans la zone pdfview (photo consultation) */
+let imgView = document.getElementById("imgView");
+if (!imgView) {
+  imgView = document.createElement("img");
+  imgView.id = "imgView";
+  imgView.alt = "Photo bâtiment";
+  pdfFrame.parentNode.appendChild(imgView);
+}
+
+function openDrawer() {
+  drawer.classList.add("open");
+}
+function closeDrawer() {
+  drawer.classList.remove("open");
+}
+openBilansBtn.addEventListener("click", openDrawer);
+closeDrawerBtn.addEventListener("click", closeDrawer);
+backdrop.addEventListener("click", closeDrawer);
+
+/* === Viewer helpers (consultation, pas téléchargement) === */
+function showPdf(title, url) {
+  pdfTitle.textContent = title;
+  openNewTab.style.display = "inline-flex";
+  openNewTab.href = url;
+
+  imgView.style.display = "none";
+  pdfFrame.style.display = "block";
+  pdfFrame.src = url; // consultation
+  openDrawer();
+}
+
+function showImage(title, url) {
+  pdfTitle.textContent = title;
+  openNewTab.style.display = "inline-flex";
+  openNewTab.href = url;
+
+  pdfFrame.style.display = "none";
+  imgView.style.display = "block";
+  imgView.src = url;
+  openDrawer();
+}
+
+/* === Populate bilans list === */
+function renderBilans() {
+  bilansList.innerHTML = "";
+  BILANS.forEach((b, idx) => {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `
+      <div class="name">${b.name}</div>
+      <div class="meta">Bilan communal (PDF)</div>
+    `;
+    el.addEventListener("click", () => {
+      // active state
+      [...bilansList.querySelectorAll(".item")].forEach(x => x.classList.remove("active"));
+      el.classList.add("active");
+      showPdf(`Bilan communal — ${b.name}`, PDF_BASE + b.file);
     });
+    bilansList.appendChild(el);
 
-    map.addLayer({
-        id: 'points',
-        type: 'circle',
-        source: 'batiments',
-        paint: {
-            'circle-radius': 7,
-            'circle-color': '#d32f2f',
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff'
-        }
-    });
+    // auto-select first
+    if (idx === 0) el.classList.add("active");
+  });
+}
+renderBilans();
 
-    map.on('click', 'points', (e) => {
-        const p = e.features[0].properties;
-
-        const photo = `img/${p.photo}`;
-        const pdf = p.pdf_bat ? `<a target="_blank" href="pdf/${p.pdf_bat}">📄 Fiche bâtiment</a>` : '';
-
-        const html = `
-        <div class="popup">
-            <h3>${p.ID_bat}</h3>
-            <img src="${photo}">
-            <div><b>Compteurs :</b><br>${p.Compteur_bati}</div>
-            ${pdf}
-        </div>`;
-
-        new mapboxgl.Popup()
-            .setLngLat(e.lngLat)
-            .setHTML(html)
-            .addTo(map);
-    });
-
+/* === Zoom pill === */
+map.on("zoom", () => {
+  zoomPill.textContent = `Zoom : ${map.getZoom().toFixed(1)}`;
 });
-</script>
+zoomPill.textContent = `Zoom : ${map.getZoom().toFixed(1)}`;
 
-</body>
-</html>
+/* === Load geojson + points === */
+map.on("load", async () => {
+  const geojson = await (await fetch(GEOJSON_URL, { cache: "no-store" })).json();
+
+  map.addSource("batiments", {
+    type: "geojson",
+    data: geojson
+  });
+
+  map.addLayer({
+    id: "points",
+    type: "circle",
+    source: "batiments",
+    paint: {
+      "circle-radius": 7,
+      "circle-color": "#d32f2f",
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#ffffff"
+    }
+  });
+
+  // fit bounds
+  const bounds = new mapboxgl.LngLatBounds();
+  geojson.features.forEach(f => {
+    if (f.geometry && f.geometry.coordinates) bounds.extend(f.geometry.coordinates);
+  });
+  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 120, maxZoom: 16 });
+
+  map.on("mouseenter", "points", () => map.getCanvas().style.cursor = "pointer");
+  map.on("mouseleave", "points", () => map.getCanvas().style.cursor = "");
+
+  map.on("click", "points", (e) => {
+    const f = e.features[0];
+    const p = f.properties || {};
+
+    const id = p.ID_bat || "Bâtiment";
+    const compteurs = (p.Compteur_bati || "—").toString();
+
+    const photoFile = (p.photo || "").toString().trim();
+    const pdfFile = (p.pdf_bat || "").toString().trim();
+
+    const photoUrl = photoFile ? `${IMG_BASE}${photoFile}` : "";
+    const pdfUrl = (pdfFile && pdfFile !== "NULL") ? `${PDF_BASE}${pdfFile}` : "";
+
+    const html = `
+      <div class="popup-mini">
+        <h3>${id}</h3>
+        <div class="row"><b>Compteurs</b> : ${compteurs}</div>
+
+        ${photoUrl ? `
+          <a class="thumb" href="${photoUrl}" target="_blank" title="Ouvrir la photo">
+            <img src="${photoUrl}" alt="${id}">
+          </a>
+        ` : `<div class="muted">Pas de photo</div>`}
+
+        <div class="actions">
+          ${photoUrl ? `<button data-open-img="1">🖼️ Photo</button>` : ``}
+          ${pdfUrl ? `<button data-open-pdf="1">📄 Fiche PDF</button>` : `<span class="muted">Pas de PDF</span>`}
+        </div>
+      </div>
+    `;
+
+    const popup = new mapboxgl.Popup({ maxWidth: "260px", closeButton: true, closeOnClick: true })
+      .setLngLat(e.lngLat)
+      .setHTML(html)
+      .addTo(map);
+
+    // bind buttons inside popup (après insertion DOM)
+    setTimeout(() => {
+      const content = popup.getElement()?.querySelector(".mapboxgl-popup-content");
+      if (!content) return;
+
+      const btnImg = content.querySelector("button[data-open-img]");
+      if (btnImg && photoUrl) {
+        btnImg.addEventListener("click", () => showImage(`Photo — ${id}`, photoUrl));
+      }
+
+      const btnPdf = content.querySelector("button[data-open-pdf]");
+      if (btnPdf && pdfUrl) {
+        btnPdf.addEventListener("click", () => showPdf(`Fiche bâtiment — ${id}`, pdfUrl));
+      }
+    }, 0);
+  });
+});
