@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Carte énergétique Vendémian</title>
+
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+
+<style>
+body { margin:0; padding:0; }
+#map { position:absolute; top:0; bottom:0; width:100%; }
+
+.popup img{
+  width:250px;
+  border-radius:8px;
+  margin-bottom:8px;
+}
+
+.popup a{
+  display:inline-block;
+  margin-top:5px;
+  background:#2e7d32;
+  color:white;
+  padding:6px 10px;
+  text-decoration:none;
+  border-radius:6px;
+}
+</style>
+
+</head>
+
+<body>
+<div id="map"></div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoibmluYW5vdW4iLCJhIjoiY2pjdHBoZGlzMnV4dDJxcGc5azJkbWRiYSJ9.o4dZRrdHcgVEKCveOXG1YQ';
+
+const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v12',
+    center: [3.5617, 43.5800],
+    zoom: 15
+});
+
+map.on('load', () => {
+
+    map.addSource('batiments', {
+        type: 'geojson',
+        data: 'data/Données_Bat.geojson'
+    });
+
+    map.addLayer({
+        id: 'points',
+        type: 'circle',
+        source: 'batiments',
+        paint: {
+            'circle-radius': 7,
+            'circle-color': '#d32f2f',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#ffffff'
+        }
+    });
+
+    map.on('click', 'points', (e) => {
+        const p = e.features[0].properties;
+
+        const photo = `img/${p.photo}`;
+        const pdf = p.pdf_bat ? `<a target="_blank" href="pdf/${p.pdf_bat}">📄 Fiche bâtiment</a>` : '';
+
+        const html = `
+        <div class="popup">
+            <h3>${p.ID_bat}</h3>
+            <img src="${photo}">
+            <div><b>Compteurs :</b><br>${p.Compteur_bati}</div>
+            ${pdf}
+        </div>`;
+
+        new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(html)
+            .addTo(map);
+    });
+
+});
+</script>
+
+</body>
+</html>
